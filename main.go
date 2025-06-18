@@ -1,43 +1,30 @@
 package main
 
 import (
-	"fmt"
 	"log"
 	"os"
-	"os/signal"
-	"syscall"
 
-	"github.com/bwmarrin/discordgo"
+	"github.com/joho/godotenv"
+	bot "github.com/taberiv/gopher-dm/bot"
+	"github.com/taberiv/gopher-dm/sqlite"
+	_ "github.com/taberiv/gopher-dm/sqlite"
 )
 
 func main() {
-	sess, err := discordgo.New("Bot " + DiscordKey)
+	// Load environment variables
+	err := godotenv.Load("local.env")
 	if err != nil {
 		log.Fatal(err)
 	}
 
-	sess.AddHandler(func(s *discordgo.Session, m *discordgo.MessageCreate) {
-		if m.Author.ID == s.State.User.ID {
-			return
-		}
-
-		if m.Content == "hello" {
-			s.ChannelMessageSend(m.ChannelID, "world!")
-		}
-	})
-
-	sess.Identify.Intents = discordgo.IntentsAllWithoutPrivileged
-
-	err = sess.Open()
+	// Initialize Database
+	db, err := sqlite.Initialize()
 	if err != nil {
 		log.Fatal(err)
 	}
-	defer sess.Close()
+	defer db.Close()
 
-	fmt.Println("The bot is online!")
-
-	sc := make(chan os.Signal, 1)
-	signal.Notify(sc, syscall.SIGINT, syscall.SIGTERM)
-	<-sc
-	fmt.Println("The bot is down!")
+	// Start Discord Bot
+	bot.BotToken = os.Getenv("BOT_TOKEN")
+	bot.Run()
 }
