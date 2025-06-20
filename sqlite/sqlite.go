@@ -56,11 +56,11 @@ func Initialize() (*sql.DB, error) {
 	return db, nil
 }
 
-func CreateCampaign(title string) error {
+func UpdateCampaign(title, refereeID, playerRoleID string) (bool, error) {
 	// Insert data
 	_, err := db.Exec(`INSERT INTO campaign (title) VALUES (?)`, title)
 	if err != nil {
 		log.Println(err)
 	}
-	return err
+	return false, err
 }

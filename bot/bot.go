@@ -6,67 +6,58 @@ import (
 	"os/signal"
 
 	"github.com/bwmarrin/discordgo"
-	"github.com/taberiv/gopher-dm/sqlite"
 )
 
-var BotToken, AppID string
-var GuildID = "659809913194807306"
-
-func checkNilErr(e error) {
+func checkNilErrMsg(e error, msg string) {
 	if e != nil {
-		log.Fatal(e)
+		if msg != "" {
+			log.Fatalf("%s: %v", msg, e)
+		} else {
+			log.Fatal(e)
+		}
 	}
 }
 
-func Run() {
+func checkNilErr(e error) {
+	checkNilErrMsg(e, "")
+}
 
+func Run(botToken, guildID string, debug bool) {
 	// Create session
-	discord, err := discordgo.New("Bot " + BotToken)
-	checkNilErr(err)
+	discord, err := discordgo.New("Bot " + botToken)
+	checkNilErrMsg(err, "Error creating bot, check token")
 
 	// Add Command Handler
 	discord.AddHandler(onInteractionCreate)
 
 	// Start Discord Session
 	err = discord.Open()
-	checkNilErr(err)
+	checkNilErrMsg(err, "Error opening session")
 
-	log.Println("Gopher DM is starting a session...")
+	log.Println("Gopher DM is starting the session...")
 	defer discord.Close()
 
-	// Register Commands
-	user, err := discord.User("@me")
-	checkNilErr(err)
-	AppID = user.ID
-	_, err = discord.ApplicationCommandCreate(AppID, GuildID, Commands["campaign"])
-	checkNilErr(err)
+	log.Println("Registering commands...")
+	registeredCommands := RegisterCommands(discord, guildID, debug)
+	if debug {
+		defer DeleteCommands(discord, guildID, registeredCommands)
+	}
+
+	log.Println("The adventure begins!")
 
 	// Close on OS Interrupt
 	c := make(chan os.Signal, 1)
 	signal.Notify(c, os.Interrupt)
 	<-c
-	log.Println("Scheduling, no!")
+	log.Println("Ending session...")
 }
 
 func onInteractionCreate(s *discordgo.Session, i *discordgo.InteractionCreate) {
-	if i.Type == discordgo.InteractionApplicationCommand {
-		switch i.ApplicationCommandData().Name {
-		case Campaign:
-			title := i.Interaction.ApplicationCommandData().Options[0]
-			log.Printf("Create campaign: %s\n", title.StringValue())
-			err := sqlite.CreateCampaign(title.StringValue())
-			var res string
-			if err != nil {
-				res = "Failed. Campaign already exists!"
-			} else {
-				res = "Created campaign " + title.StringValue() + "!"
-			}
-			s.InteractionRespond(i.Interaction, &discordgo.InteractionResponse{
-				Type: discordgo.InteractionResponseChannelMessageWithSource,
-				Data: &discordgo.InteractionResponseData{
-					Content: res,
-				},
-			})
+	if h, ok := CommandHandlers[i.ApplicationCommandData().Name]; ok {
+		h(s, i)
+	} else if true {
+		if h, ok := DebugHandlers[i.ApplicationCommandData().Name]; ok {
+			h(s, i)
 		}
 	}
 }
