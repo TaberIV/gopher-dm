@@ -5,6 +5,8 @@ import (
 	"log"
 
 	sq "github.com/Masterminds/squirrel"
+	"github.com/Masterminds/structable"
+	"github.com/google/uuid"
 	_ "modernc.org/sqlite"
 )
 
@@ -25,7 +27,7 @@ func Initialize() (*sql.DB, error) {
 
 	// Create a table
 	_, err = db.Exec(`CREATE TABLE IF NOT EXISTS campaign (
-		id INTEGER PRIMARY KEY AUTOINCREMENT,
+		id INTEGER UNIQUE NOT NULL,
 		title TEXT UNIQUE NOT NULL,
 		description TEXT DEFAULT '',
 		guild_id TEXT NOT NULL,
@@ -33,7 +35,8 @@ func Initialize() (*sql.DB, error) {
 		player_role_id TEXT DEFAULT '',
 		channel_id TEXT DEFAULT '',
 		created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-		updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+		updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+		CONSTRAINT PK_Person PRIMARY KEY (title, guild_id)
 	)`)
 	if err != nil {
 		return nil, err
@@ -65,10 +68,13 @@ func Initialize() (*sql.DB, error) {
 }
 
 type Campaign struct {
-	Id           int64
-	Title        string
-	RefereeID    string
-	PlayerRoleID string
+	Id           uint32 `stbl:"id, UNIQUE NOT NULL"`
+	GuildID      string `stbl:"guild_id, NOT NULL"`
+	Title        string `stbl:"title, NOT NULL"`
+	RefereeID    string `stbl:"referee_id, DEFAULT ''"`
+	PlayerRoleID string `stbl:"player_role_id, DEFAULT ''"`
+	Description  string `stbl:"description, DEFAULT ''"`
+	ChannelID    string `stbl:"channel_id, DEFAULT ''"`
 	// createdAt    string
 	// updatedAt    string
 }
@@ -81,114 +87,74 @@ const (
 	InsertCode
 )
 
-func FetchUpdateCampaignByTitle(input Campaign) (result *Campaign, changeCode int) {
-	ctx, err := db.Begin()
+func FetchUpdateCampaignByTitle(input *Campaign) (obj *Campaign, changeCode int) {
+	// ctx, err := db.Begin()
+	// if err != nil {
+	// 	log.Printf("Error starting transaction: %v", err)
+	// 	return
+	// }
+
+	// Check if the campaign already exists
+	memProxy := sq.NewStmtCacheProxy(db)
+	ctx, err := memProxy.Begin()
 	if err != nil {
 		log.Printf("Error starting transaction: %v", err)
 		return
 	}
 
-	// Check if the campaign already exists
-	query, args, err := sq.Select("id").From("campaign").Where(sq.Eq{"title": input.Title}).ToSql()
-	if err != nil {
-		log.Printf("Error building query: %v", err)
-		return
-	}
+	obj = &Campaign{}
+	r := structable.New(memProxy, "sqlite").Bind("campaign", obj)
+	err = r.LoadWhere(sq.Eq{"title": input.Title}, sq.Eq{"guild_id": input.GuildID})
 
-	var id int64
+	switch err {
+	case nil:
+		log.Printf("Campaign %s already exists with ID %d and GuildID: %s", obj.Title, obj.Id, obj.GuildID)
 
-	row := ctx.QueryRow(query, args...)
-	err = row.Scan(&id)
-	if err == nil {
-		log.Printf("Campaign %s already exists with ID %d", input.Title, id)
-		setMap := input.makeSetMap()
+		var updates bool
+		if input.RefereeID != "" {
+			obj.RefereeID = input.RefereeID
+			updates = true
+		}
+		if input.PlayerRoleID != "" {
+			obj.PlayerRoleID = input.PlayerRoleID
+			updates = true
+		}
+		if input.Description != "" {
+			obj.Description = input.Description
+			updates = true
+		}
+		if input.ChannelID != "" {
+			obj.ChannelID = input.ChannelID
+			updates = true
+		}
 
-		if len(setMap) == 1 {
+		if !updates {
 			log.Printf("No fields to update for campaign %s", input.Title)
-		} else {
-			log.Printf("Updating campaign %s...", input.Title)
-
-			changeCode = UpdateCode
-			query, args, err = sq.Update("campaign").SetMap(setMap).Where(sq.Eq{"id": id}).ToSql()
-			if err != nil {
-				log.Printf("Error building update query: %v", err)
-				return
-			}
-			_, err = ctx.Exec(query, args...)
-			if err != nil {
-				log.Printf("Error updating campaign: %v", err)
-				ctx.Rollback()
-				return
-			}
+			return
 		}
-	} else if err == sql.ErrNoRows {
+
+		changeCode = UpdateCode
+		r.Update()
+	case sql.ErrNoRows:
 		log.Printf("Campaign %s does not exist, inserting it...", input.Title)
+		obj = input
+		obj.Id = uuid.New().ID()
+		r.Bind("campaign", obj)
 
-		query, args, err = sq.Insert("campaign").SetMap(input.makeSetMap()).ToSql()
+		err = r.Insert()
 		if err != nil {
-			log.Printf("Error building insert query: %v", err)
-			return
-		}
-
-		res, err := ctx.Exec(query, args...)
-		if err != nil {
-			log.Printf("Error inserting campaign: %v", err)
+			log.Printf("Error inserting campaign: %v. Rolling back changes... (id is %d)", err, input.Id)
 			ctx.Rollback()
 			return
 		}
-
-		id, err = res.LastInsertId()
-		if err != nil {
-			log.Printf("Error getting last insert ID: %v", err)
-			ctx.Rollback()
-			return
-		}
-	} else if err != nil {
+		changeCode = InsertCode
+		log.Printf("Campaign \"%s\" inserted successfully with ID %d", input.Title, obj.Id)
+	default:
 		log.Printf("Error checking campaign existence: %v", err)
 		return
 	}
 
-	ctx.Commit()
-
-	result, err = getCampaignById(id)
 	return
-}
-
-func getCampaignById(id int64) (*Campaign, error) {
-	query, args, err := sq.Select("id", "title", "referee_id", "player_role_id").From("campaign").Where(sq.Eq{"id": id}).ToSql()
-	if err != nil {
-		log.Printf("Error building query: %v", err)
-		return nil, err
-	}
-	row := db.QueryRow(query, args...)
-	var campaign Campaign
-	err = row.Scan(&campaign.Id, &campaign.Title, &campaign.RefereeID, &campaign.PlayerRoleID)
-	if err != nil {
-		if err == sql.ErrNoRows {
-			log.Printf("No campaign found with ID %d", id)
-			return nil, nil
-		}
-		log.Printf("Error scanning campaign: %v", err)
-		return nil, err
-	}
-	log.Printf("Campaign found: %+v", campaign)
-	return &campaign, nil
-}
-
-func (input *Campaign) makeSetMap() map[string]interface{} {
-	setMap := make(map[string]interface{})
-
-	if input.Title != "" {
-		setMap["title"] = input.Title
-	}
-	if input.RefereeID != "" {
-		setMap["referee_id"] = input.RefereeID
-	}
-	if input.PlayerRoleID != "" {
-		setMap["player_role_id"] = input.PlayerRoleID
-	}
-
-	return setMap
 }
 
 func GetAllCampaigns() ([]Campaign, error) {

@@ -37,6 +37,18 @@ var Commands = []*discordgo.ApplicationCommand{
 				Description: "The role assigned to players in the campaign.",
 				Required:    false,
 			},
+			{
+				Type:        discordgo.ApplicationCommandOptionString,
+				Name:        "description",
+				Description: "A brief description of the campaign.",
+				Required:    false,
+			},
+			{
+				Type:        discordgo.ApplicationCommandOptionChannel,
+				Name:        "channel",
+				Description: "The primary channel where the campaign will be discussed.",
+				Required:    false,
+			},
 		},
 	},
 	{
@@ -72,16 +84,26 @@ var CommandHandlers = map[string]func(s *discordgo.Session, i *discordgo.Interac
 		if optionMap["referee"] != nil {
 			refereeID = optionMap["referee"].UserValue(s).ID
 		}
-
 		var playerRoleID string
 		if optionMap["player-role"] != nil {
 			playerRoleID = optionMap["player-role"].RoleValue(s, i.GuildID).ID
 		}
+		var description string
+		if optionMap["description"] != nil {
+			description = optionMap["description"].StringValue()
+		}
+		var channelID string
+		if optionMap["channel"] != nil {
+			channelID = optionMap["channel"].ChannelValue(s).ID
+		}
 
-		input := sqlite.Campaign{
+		input := &sqlite.Campaign{
 			Title:        title,
+			GuildID:      i.GuildID,
 			RefereeID:    refereeID,
 			PlayerRoleID: playerRoleID,
+			Description:  description,
+			ChannelID:    channelID,
 		}
 		campaign, updateCode := sqlite.FetchUpdateCampaignByTitle(input)
 
@@ -100,6 +122,12 @@ var CommandHandlers = map[string]func(s *discordgo.Session, i *discordgo.Interac
 		}
 		if playerRole, err := s.State.Role(i.GuildID, campaign.PlayerRoleID); playerRole != nil && err == nil {
 			res = fmt.Sprintf("%s Players in it have the %s role.", res, playerRole.Mention())
+		}
+		if campaign.Description != "" {
+			res = fmt.Sprintf("%s %s", res, description)
+		}
+		if channel, err := s.State.Channel(campaign.ChannelID); channel != nil && err == nil {
+			res = fmt.Sprintf("%s The primary discussion channel is %s.", res, channel.Mention())
 		}
 
 		s.InteractionRespond(i.Interaction, &discordgo.InteractionResponse{
