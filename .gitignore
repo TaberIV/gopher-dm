@@ -33,3 +33,4 @@ go.work.sum
 
 # Secrets
 local.env
+campaign.db
