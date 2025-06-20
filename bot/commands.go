@@ -9,11 +9,8 @@ import (
 )
 
 const (
-	Campaign string = "campaign"
-)
-
-const (
-	DebugClear string = "clear"
+	Campaign      string = "campaign"
+	ListCampaigns string = "list-campaigns"
 )
 
 var Commands = []*discordgo.ApplicationCommand{
@@ -40,6 +37,10 @@ var Commands = []*discordgo.ApplicationCommand{
 				Required:    false,
 			},
 		},
+	},
+	{
+		Name:        ListCampaigns,
+		Description: "List all campaigns.",
 	},
 }
 
@@ -68,22 +69,57 @@ var CommandHandlers = map[string]func(s *discordgo.Session, i *discordgo.Interac
 			playerRoleID = playerRole.ID
 		}
 
-		exists, err := sqlite.UpdateCampaign(title, refereeID, playerRoleID)
+		campaign := sqlite.Campaign{
+			Title:        title,
+			RefereeID:    refereeID,
+			PlayerRoleID: playerRoleID,
+		}
+		campaign, err := sqlite.UpdateCampaign(campaign)
 		var res string
 		if err != nil {
 			res = "Error creating campaign"
 		} else {
-			if exists {
-				res = fmt.Sprintf("Updated campaign %s!", title)
-			} else {
-				res = fmt.Sprintf("Created campaign %s!", title)
-			}
+			res = fmt.Sprintf("Created campaign %s!", title)
 
-			if referee != nil {
+			if referee, err = s.User(campaign.RefereeID); referee != nil && err == nil {
 				res = fmt.Sprintf("%s It is run by %s.", res, referee.Mention())
 			}
-			if playerRole != nil {
+			if playerRole, err = s.State.Role(i.GuildID, campaign.PlayerRoleID); playerRole != nil && err == nil {
 				res = fmt.Sprintf("%s Players in it have the %s role.", res, playerRole.Mention())
+			}
+		}
+
+		s.InteractionRespond(i.Interaction, &discordgo.InteractionResponse{
+			Type: discordgo.InteractionResponseChannelMessageWithSource,
+			Data: &discordgo.InteractionResponseData{
+				Content: res,
+			},
+		})
+	},
+	ListCampaigns: func(s *discordgo.Session, i *discordgo.InteractionCreate) {
+		campaigns, err := sqlite.GetAllCampaigns()
+		if err != nil {
+			log.Printf("Error getting campaigns: %v", err)
+		}
+
+		var res string
+		for _, campaign := range campaigns {
+			res += fmt.Sprintf("%d. %s\n", campaign.Id, campaign.Title)
+			if campaign.RefereeID != "" {
+				referee, err := s.User(campaign.RefereeID)
+				if err != nil {
+					log.Printf("Error getting referee: %v", err)
+				} else {
+					res += fmt.Sprintf("    - Referee: %s\n", referee.Mention())
+				}
+			}
+			if campaign.PlayerRoleID != "" {
+				playerRole, err := s.State.Role(i.GuildID, campaign.PlayerRoleID)
+				if err != nil {
+					log.Printf("Error getting player role: %v", err)
+				} else {
+					res += fmt.Sprintf("    - Player Role: %s\n", playerRole.Mention())
+				}
 			}
 		}
 

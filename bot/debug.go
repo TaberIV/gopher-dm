@@ -9,6 +9,10 @@ import (
 	"github.com/bwmarrin/discordgo"
 )
 
+const (
+	DebugClear string = "clear"
+)
+
 var DebugCommands map[string]*discordgo.ApplicationCommand = map[string]*discordgo.ApplicationCommand{
 	DebugClear: {
 		Name:        DebugClear,
