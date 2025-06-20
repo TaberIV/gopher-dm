@@ -68,36 +68,38 @@ var CommandHandlers = map[string]func(s *discordgo.Session, i *discordgo.Interac
 
 		title := optionMap["title"].StringValue()
 
-		var referee *discordgo.User
 		var refereeID string
 		if optionMap["referee"] != nil {
-			referee = optionMap["referee"].UserValue(s)
-			refereeID = referee.ID
+			refereeID = optionMap["referee"].UserValue(s).ID
 		}
 
-		var playerRole *discordgo.Role
 		var playerRoleID string
 		if optionMap["player-role"] != nil {
-			playerRole = optionMap["player-role"].RoleValue(s, i.GuildID)
-			playerRoleID = playerRole.ID
+			playerRoleID = optionMap["player-role"].RoleValue(s, i.GuildID).ID
 		}
 
-		campaign := sqlite.Campaign{
+		input := sqlite.Campaign{
 			Title:        title,
 			RefereeID:    refereeID,
 			PlayerRoleID: playerRoleID,
 		}
-		campaign, err := sqlite.UpdateCampaign(campaign)
-		var res string
-		if err != nil {
-			res = "Error creating campaign"
-		} else {
-			if referee, err = s.User(campaign.RefereeID); referee != nil && err == nil {
-				res = fmt.Sprintf("%s It is run by %s.", res, referee.Mention())
-			}
-			if playerRole, err = s.State.Role(i.GuildID, campaign.PlayerRoleID); playerRole != nil && err == nil {
-				res = fmt.Sprintf("%s Players in it have the %s role.", res, playerRole.Mention())
-			}
+		campaign, updateCode := sqlite.FetchUpdateCampaignByTitle(input)
+
+		res := fmt.Sprintf("Campaign %s was ", campaign.Title)
+		switch updateCode {
+		case sqlite.InsertCode:
+			res += "created successfully!"
+		case sqlite.UpdateCode:
+			res += "updated successfully!"
+		case sqlite.NoChangeCode:
+			res += "fetched successfully!"
+		}
+
+		if referee, err := s.User(campaign.RefereeID); referee != nil && err == nil {
+			res = fmt.Sprintf("%s It is run by %s.", res, referee.Mention())
+		}
+		if playerRole, err := s.State.Role(i.GuildID, campaign.PlayerRoleID); playerRole != nil && err == nil {
+			res = fmt.Sprintf("%s Players in it have the %s role.", res, playerRole.Mention())
 		}
 
 		s.InteractionRespond(i.Interaction, &discordgo.InteractionResponse{

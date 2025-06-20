@@ -1,5 +1,7 @@
 github.com/Masterminds/squirrel v1.5.4 h1:uUcX/aBc8O7Fg9kaISIUsHXdKuqehiXAMQTYX8afzqM=
 github.com/Masterminds/squirrel v1.5.4/go.mod h1:NNaOrjSoIDfDA40n7sr2tPNZRfjzjA400rg+riTZj10=
+github.com/Masterminds/structable v0.0.0-20170407152004-a1a302ef78ec h1:zchF0NAt+UR7iOTb+htQIauAUh3tv7xuHBWqrj6VlBk=
+github.com/Masterminds/structable v0.0.0-20170407152004-a1a302ef78ec/go.mod h1:CBK/3s101oxmHZ6XJtdD3yKaeG6aRNi7TVVzJiWpMIY=
 github.com/bwmarrin/discordgo v0.29.0 h1:FmWeXFaKUwrcL3Cx65c20bTRW+vOb6k8AnaP+EgjDno=
 github.com/bwmarrin/discordgo v0.29.0/go.mod h1:NJZpH+1AfhIcyQsPeuBKsUtYrRnjkyu0kIVMCHkZtRY=
 github.com/davecgh/go-spew v1.1.1/go.mod h1:J7Y8YcW2NihsgmVo/mv3lAwl/skON4iLHjSsI+c5H38=
