@@ -18,10 +18,6 @@ func checkNilErrMsg(e error, msg string) {
 	}
 }
 
-func checkNilErr(e error) {
-	checkNilErrMsg(e, "")
-}
-
 func Run(botToken, guildID string, debug bool) {
 	// Create session
 	discord, err := discordgo.New("Bot " + botToken)

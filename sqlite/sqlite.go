@@ -82,7 +82,18 @@ func UpdateCampaign(input Campaign) (Campaign, error) {
 	}
 
 	// Insert data
-	_, err := db.Exec(`INSERT INTO campaign (title) VALUES (?)`, input.Title)
+	fields := ""
+	args := []any{input.Title}
+	if input.RefereeID != "" {
+		fields += ", referee_id"
+		args = append(args, input.RefereeID)
+	}
+	if input.PlayerRoleID != "" {
+		fields += ", player_role_id"
+		args = append(args, input.PlayerRoleID)
+	}
+	log.Printf("Inserting campaign %s with fields: %s... %+v", input.Title, fields, args)
+	_, err := db.Exec(`INSERT INTO campaign (title`+fields+`) VALUES (?)`, args...)
 	var e *sqlite.Error
 	if err != nil {
 		if errors.As(err, &e); e.Code() == uniqueConstraintErrorCode {
@@ -123,12 +134,12 @@ func UpdateCampaign(input Campaign) (Campaign, error) {
 	}
 
 	// Get the full campaign details from the database
+	log.Printf("Retrieving campaign %s from the database...", input.Title)
 	row := db.QueryRow(`SELECT id, title, referee_id, player_role_id FROM campaign WHERE title = ?`, input.Title)
 	err = row.Scan(&campaign.Id, &campaign.Title, &campaign.RefereeID, &campaign.PlayerRoleID)
 	if err != nil {
 		log.Printf("Error retrieving campaign %s: %v", input.Title, err)
 	}
-	log.Printf("Campaign %s created successfully.", input.Title)
 
 	return campaign, err
 }
@@ -151,4 +162,14 @@ func GetAllCampaigns() ([]Campaign, error) {
 	}
 
 	return campaigns, nil
+}
+
+func DeleteCampaign(title string) error {
+	_, err := db.Exec(`DELETE FROM campaign WHERE title = ?`, title)
+	if err != nil {
+		log.Printf("Error deleting campaign %s: %v", title, err)
+		return err
+	}
+	log.Printf("Campaign %s deleted successfully.", title)
+	return nil
 }

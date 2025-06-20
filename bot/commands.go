@@ -9,8 +9,9 @@ import (
 )
 
 const (
-	Campaign      string = "campaign"
-	ListCampaigns string = "list-campaigns"
+	Campaign       string = "campaign"
+	ListCampaigns  string = "list-campaigns"
+	DeleteCampaign string = "delete-campaign"
 )
 
 var Commands = []*discordgo.ApplicationCommand{
@@ -41,6 +42,18 @@ var Commands = []*discordgo.ApplicationCommand{
 	{
 		Name:        ListCampaigns,
 		Description: "List all campaigns.",
+	},
+	{
+		Name:        DeleteCampaign,
+		Description: "Delete a campaign.",
+		Options: []*discordgo.ApplicationCommandOption{
+			{
+				Type:        discordgo.ApplicationCommandOptionString,
+				Name:        "title",
+				Description: "The title of the campaign to delete.",
+				Required:    true,
+			},
+		},
 	},
 }
 
@@ -79,8 +92,6 @@ var CommandHandlers = map[string]func(s *discordgo.Session, i *discordgo.Interac
 		if err != nil {
 			res = "Error creating campaign"
 		} else {
-			res = fmt.Sprintf("Created campaign %s!", title)
-
 			if referee, err = s.User(campaign.RefereeID); referee != nil && err == nil {
 				res = fmt.Sprintf("%s It is run by %s.", res, referee.Mention())
 			}
@@ -123,10 +134,36 @@ var CommandHandlers = map[string]func(s *discordgo.Session, i *discordgo.Interac
 			}
 		}
 
+		if res == "" {
+			res = "No campaigns found."
+		}
+
 		s.InteractionRespond(i.Interaction, &discordgo.InteractionResponse{
 			Type: discordgo.InteractionResponseChannelMessageWithSource,
 			Data: &discordgo.InteractionResponseData{
 				Content: res,
+			},
+		})
+	},
+	DeleteCampaign: func(s *discordgo.Session, i *discordgo.InteractionCreate) {
+		options := i.Interaction.ApplicationCommandData().Options
+
+		optionMap := make(map[string]*discordgo.ApplicationCommandInteractionDataOption, len(options))
+		for _, opt := range options {
+			optionMap[opt.Name] = opt
+		}
+
+		title := optionMap["title"].StringValue()
+
+		err := sqlite.DeleteCampaign(title)
+		if err != nil {
+			log.Printf("Error deleting campaign: %v", err)
+		}
+
+		s.InteractionRespond(i.Interaction, &discordgo.InteractionResponse{
+			Type: discordgo.InteractionResponseChannelMessageWithSource,
+			Data: &discordgo.InteractionResponseData{
+				Content: fmt.Sprintf("Deleted campaign %s!", title),
 			},
 		})
 	},
